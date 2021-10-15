@@ -34,4 +34,3 @@ VERSION 5:
 (This would be beyond the expected scope of the project, due to the potential issues with getting this information)
 Get and use Flea Market Data to determine items to post on market VS selling to vendors. Detect cases where an item
 could be bought off the flea market and used in a barter that would cause a net gain in value.
-------------------------------------------------------------------------------------------------------------------------
