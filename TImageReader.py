@@ -8,7 +8,17 @@ correct container.
 Probably might not even have to be a class.
 """
 
+import cv2
+
 
 class TImageReader:
     def __init__(self):
         pass
+
+
+
+
+
+
+if __name__ == "__main__":
+    pass
