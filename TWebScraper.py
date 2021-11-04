@@ -11,17 +11,33 @@ Eventually will probably scrape flea market data from another website.
 import bs4
 import pandas as pd
 import requests
+import os
+import shutil
+import time
 
-# TODO: This class is getting a bit big, split it if it becomes too unwieldy.
+
+# TODO: Fix keys sometimes showing incorrect image, or no image
+# TODO: Fix
 
 
 class TWebScraper:
     def __init__(self, item=True, price=True):
         if item and price:
             # self.supplemental_item_information_gatherer("https://escapefromtarkov.fandom.com/wiki/Folder_with_intelligence")
-            self.catalog_builder("https://escapefromtarkov.fandom.com/wiki/Loot")
-            # self.catalog_builder("https://escapefromtarkov.fandom.com/wiki/Containers")
-            self.price_catalog_builder()
+            tarkov_wiki_urls = ["https://escapefromtarkov.fandom.com/wiki/Loot",
+                                "https://escapefromtarkov.fandom.com/wiki/Weapons",
+                                "https://escapefromtarkov.fandom.com/wiki/Keys_%26_Intel",
+                                "https://escapefromtarkov.fandom.com/wiki/Containers",
+                                "https://escapefromtarkov.fandom.com/wiki/Weapon_mods"
+                                ]
+
+            self.directory_builder(tarkov_wiki_urls)
+            start = time.time()  # debug
+            for url in tarkov_wiki_urls:
+                self.catalog_builder(url)
+            end = time.time()  # debug
+            print("All Downloads Complete")
+            print(f"Total Time:{start-end}") # debug
         elif item:
             self.catalog_builder()
         elif price:
@@ -32,15 +48,26 @@ class TWebScraper:
          https://escapefromtarkov.fandom.com/wiki/Loot
         """
 
-        # TODO: Make this generate an appropriate file structure to save each table and its corresponding images.
-        # TODO: This will allow for easier searching and reading back in to the main program.
         source = requests.get(url).text
         soup = bs4.BeautifulSoup(source, 'lxml')
         page_tables = soup.findAll('table', class_='wikitable sortable')
-        for table in page_tables:
-            self.table_builder(table)
+        for table_num, table in enumerate(page_tables):
+            table_df = self.table_builder(table)
 
-    def table_builder(self, table: bs4.element.Tag):
+            wd = os.getcwd()
+
+            page_name = url.split("/")[-1]
+            page_directory = os.path.join(wd, "Data", "catalog", page_name)
+            os.chdir(page_directory)
+            table_df.to_csv(f"{page_name}{table_num}.csv")
+
+            image_directory = os.path.join(page_directory, "images")
+            os.chdir(image_directory)
+            print("Downloading Images")
+            self.image_downloader(table_df)
+            os.chdir(wd)  # return working directory to original.
+
+    def table_builder(self, table: bs4.element.Tag) -> pd.DataFrame:
         table_body = table.find("tbody")
         table_rows = table_body.findAll('tr')
         # Read table row by row, within each row read column wise.
@@ -68,12 +95,63 @@ class TWebScraper:
             else:
                 print("No Item_url column found")
 
-        # TODO: Have function here to download the images from each Image_url.
-        print("woww")
+        return table_df
 
     @staticmethod
-    def image_downloader(df: pd.DataFrame):
-        pass
+    def directory_builder(url_list: list):
+        file_names = []
+        for url in url_list:
+            file_names.append(url.split("/")[-1])
+
+        # create new catalog directory. Named catalog_YYYY_MM_DD.
+        wd = os.getcwd()
+
+        if not os.path.exists("Data"):  # create folder if it doesnt exist.
+            path = os.path.join(wd, 'Data')
+            os.mkdir(path)
+
+        data_dir = os.path.join(wd, 'Data')
+
+        catalog_path = os.path.join(data_dir, "catalog")
+
+        if os.path.exists(catalog_path):
+            old_catalog_path = os.path.join(data_dir, "catalog_old")
+
+            if os.path.exists(old_catalog_path):
+                shutil.rmtree(old_catalog_path)  # only want to keep 1 previous directory, delete the old one.
+                # os.remove(old_catalog_path)
+
+            os.rename(catalog_path, os.path.join(data_dir, 'catalog_old'))
+
+        os.mkdir(catalog_path)
+
+        for name in file_names:
+            path = os.path.join(catalog_path, name, 'images')
+            os.makedirs(path)
+
+    def image_downloader(self, df: pd.DataFrame):
+
+        df_columns = df.columns
+
+        if "Image_url" not in df_columns:
+            return
+        if "Name" not in df_columns:
+            return
+
+        df.apply(self.download_image, axis=1)
+
+    @staticmethod
+    def download_image(df_row):
+        url = df_row["Image_url"]
+        if not url:
+            print("Image_url is empty")
+            return
+
+        source = requests.get(url, stream=True)
+        if source.status_code == 200:
+            with open(f"{df_row['Name']}.png", 'wb') as f:
+                source.raw.decode_content = True
+                shutil.copyfileobj(source.raw, f)
 
     def price_catalog_builder(self):
         pass
@@ -90,9 +168,9 @@ class TWebScraper:
         item_table = soup.find('table', class_='va-infobox')
         table_rows = item_table.findAll('tr')
         for element in table_rows:
-            infobox_labels = element.find('td',class_='va-infobox-label')  # type: bs4.element.Tag
+            infobox_labels = element.find('td', class_='va-infobox-label')  # type: bs4.element.Tag
             if infobox_labels:
-                if "Grid" in infobox_labels.string:
+                if "Grid" in str(infobox_labels.string):
                     information_dict['dims'] = element.find('td', class_='va-infobox-content').string
                     break
                 else:
@@ -132,6 +210,8 @@ class TWebScraper:
 
             else:
                 raise NameError('Incorrect column classifier')
+
+        cleaned_df['Name'] = cleaned_df['Name'].apply(self.name_cleaner)
         return cleaned_df
 
     @staticmethod
@@ -147,7 +227,13 @@ class TWebScraper:
         # identify each column as, Image, Name, Identifier, or OTHER (other is any non-useful field, ie. Notes)
         classifications = []
         for column_name in df.columns:
-            col_sample = df[column_name][0]
+            try:  # sometimes a wiki table is screwed up and has no rows.
+                col_sample = df[column_name][0]
+            except IndexError:
+                print("Table has no rows.")
+                classifications.append("Other")  # pray the all encompassing "other" will save this
+                continue
+
             if "Name" in column_name:
                 name_value = col_sample.get('title')
 
@@ -179,7 +265,7 @@ class TWebScraper:
 
     def information_extractor(self, info_dict: dict, tag: str, alt_tag=None) -> str:
         # extract information from a dictionary key from each row in a df column.
-        # if alt tag provided, if tag returns None, will try the alt_tag instead.
+        # when alt tag provided, if tag returns None, will try the alt_tag instead.
         if alt_tag:
             value = self.information_extractor(info_dict, tag)
             if not value:
@@ -228,6 +314,15 @@ class TWebScraper:
 
         print(element_contents)
         return element_contents
+
+    @staticmethod
+    def name_cleaner(name: str) -> str:  # applied to dataframe to remove spaces and special characters from item names.
+        name = name.replace(" ", "_")
+        name = name.replace('"', '')
+        name = name.replace("'", "")
+        name = name.replace("/", "")
+        name = name.replace("*", "")
+        return name
 
 
 if __name__ == "__main__":  # run this to update the catalog from the wiki.
