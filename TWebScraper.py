@@ -16,19 +16,23 @@ import shutil
 import time
 
 
-# TODO: Fix keys sometimes showing incorrect image, or no image
-# TODO: Fix
-
-
 class TWebScraper:
     def __init__(self, item=True, price=True):
         if item and price:
             # self.supplemental_item_information_gatherer("https://escapefromtarkov.fandom.com/wiki/Folder_with_intelligence")
-            tarkov_wiki_urls = ["https://escapefromtarkov.fandom.com/wiki/Loot",
+            tarkov_wiki_urls = ["https://escapefromtarkov.fandom.com/wiki/Chest_rigs",
+                                "https://escapefromtarkov.fandom.com/wiki/Loot",
                                 "https://escapefromtarkov.fandom.com/wiki/Weapons",
                                 "https://escapefromtarkov.fandom.com/wiki/Keys_%26_Intel",
                                 "https://escapefromtarkov.fandom.com/wiki/Containers",
-                                "https://escapefromtarkov.fandom.com/wiki/Weapon_mods"
+                                "https://escapefromtarkov.fandom.com/wiki/Weapon_mods",
+                                "https://escapefromtarkov.fandom.com/wiki/Armor_vests",
+                                "https://escapefromtarkov.fandom.com/wiki/Backpacks",
+                                "https://escapefromtarkov.fandom.com/wiki/Headwear",
+                                "https://escapefromtarkov.fandom.com/wiki/Eyewear",
+                                "https://escapefromtarkov.fandom.com/wiki/Gear_components",
+                                "https://escapefromtarkov.fandom.com/wiki/Armbands",
+                                "https://escapefromtarkov.fandom.com/wiki/Face_cover"
                                 ]
 
             self.directory_builder(tarkov_wiki_urls)
@@ -37,7 +41,7 @@ class TWebScraper:
                 self.catalog_builder(url)
             end = time.time()  # debug
             print("All Downloads Complete")
-            print(f"Total Time:{start-end}") # debug
+            print(f"Total Time:{end-start}")  # debug
         elif item:
             self.catalog_builder()
         elif price:
@@ -58,13 +62,15 @@ class TWebScraper:
 
             page_name = url.split("/")[-1]
             page_directory = os.path.join(wd, "Data", "catalog", page_name)
-            os.chdir(page_directory)
-            table_df.to_csv(f"{page_name}{table_num}.csv")
-
             image_directory = os.path.join(page_directory, "images")
+
             os.chdir(image_directory)
             print("Downloading Images")
             self.image_downloader(table_df)
+
+            os.chdir(page_directory)
+            table_df.to_csv(f"{page_name}{table_num}.csv", index=False)
+
             os.chdir(wd)  # return working directory to original.
 
     def table_builder(self, table: bs4.element.Tag) -> pd.DataFrame:
@@ -138,10 +144,11 @@ class TWebScraper:
         if "Name" not in df_columns:
             return
 
-        df.apply(self.download_image, axis=1)
+        df['Image_url'] = df.apply(self.download_image, axis=1)
+        df.rename({'Image_url': 'Image_path'}, axis=1, inplace=True)
 
     @staticmethod
-    def download_image(df_row):
+    def download_image(df_row):  # downloads image and replaces url with path.
         url = df_row["Image_url"]
         if not url:
             print("Image_url is empty")
@@ -152,6 +159,7 @@ class TWebScraper:
             with open(f"{df_row['Name']}.png", 'wb') as f:
                 source.raw.decode_content = True
                 shutil.copyfileobj(source.raw, f)
+            return os.path.join(os.getcwd(), f"{df_row['Name']}.png")
 
     def price_catalog_builder(self):
         pass
@@ -225,6 +233,7 @@ class TWebScraper:
     @staticmethod
     def column_classifier(df: pd.DataFrame) -> list:
         # identify each column as, Image, Name, Identifier, or OTHER (other is any non-useful field, ie. Notes)
+        # only want first image found as its probably the correct one.
         classifications = []
         for column_name in df.columns:
             try:  # sometimes a wiki table is screwed up and has no rows.
@@ -248,7 +257,10 @@ class TWebScraper:
             detected_data_src = col_sample.get("data-src")  # sometimes only one of these is present.  Its infuriating.
             detected_src = col_sample.get("src")
             if detected_data_src or detected_src:
-                classifications.append("Image")
+                if "Image" not in classifications:  # only allow one Image column.
+                    classifications.append("Image")
+                else:
+                    classifications.append("Other")
                 continue
 
             detected_text = col_sample.get("text")

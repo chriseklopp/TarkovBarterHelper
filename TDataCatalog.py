@@ -4,13 +4,6 @@ This class will manage the catalog of items and their properties
 Items probably stored as a hashtable.
 Will initialize from a file containing the necessary information.
 
-
-
-May have to scrape this information from
-https://escapefromtarkov.fandom.com/wiki/Loot
-
-This function will be a part of this module, though it is something that wont need to be used very often.
-
 """
 
 
@@ -19,8 +12,6 @@ class TDataCatalog:
         pass
 
 
-
-
-
-if __name__ == "__main__":  # run this to update the catalog from the wiki.
+if __name__ == "__main__":  # debug purposes, will generate the catalog for testing without doing anything else.
     pass
+
