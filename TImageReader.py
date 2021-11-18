@@ -1,13 +1,15 @@
 """
 Processes the screenshot(s) into detected TItems.
-Contains logic for processing a singular screenshot into an ARRAY of TItems (this MAY be some custom type object)
-(This array structure will probably be important for out of game accurate inventory representation, as well
-as (most importantly) verification of detection accuracy, avoidance of double counting, and allocation of items to the
-correct container.
+Contains logic for processing a singular screenshot into TItems.
+Will determine if screenshot is of stash or of a container object.
+Read items into a dynamic placeholder TContainerItem.
+The contents of this container can then be copied to its rightful container object (be it the Stash or a container)
+later. (and probably in the TStashManager module)
+
 
 
 """
-
+import TItemTypes
 import cv2
 
 
