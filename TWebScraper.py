@@ -32,7 +32,8 @@ class TWebScraper:
                                 "https://escapefromtarkov.fandom.com/wiki/Eyewear",
                                 "https://escapefromtarkov.fandom.com/wiki/Gear_components",
                                 "https://escapefromtarkov.fandom.com/wiki/Armbands",
-                                "https://escapefromtarkov.fandom.com/wiki/Face_cover"
+                                "https://escapefromtarkov.fandom.com/wiki/Face_cover",
+                                "https://escapefromtarkov.fandom.com/wiki/Provisions"
                                 ]
 
             self.directory_builder(tarkov_wiki_urls)
@@ -42,10 +43,6 @@ class TWebScraper:
             end = time.time()  # debug
             print("All Downloads Complete")
             print(f"Total Time:{end-start}")  # debug
-        elif item:
-            self.catalog_builder()
-        elif price:
-            self.price_catalog_builder()
 
     def catalog_builder(self, url: str):
         """
@@ -95,9 +92,9 @@ class TWebScraper:
         table_df = pd.DataFrame(master_list, columns=extracted_names)
         table_df = self.table_cleaner(table_df)
 
-        if "dims" not in table_df.columns:
+        if "Outer_dims" not in table_df.columns:
             if "Item_url" in table_df.columns:
-                table_df["dims"] = table_df['Item_url'].apply(self.supplemental_item_information_gatherer)
+                table_df["Outer_dims"] = table_df['Item_url'].apply(self.supplemental_item_information_gatherer)
             else:
                 print("No Item_url column found")
 
@@ -165,10 +162,11 @@ class TWebScraper:
         pass
 
     @staticmethod
-    def supplemental_item_information_gatherer(url: str) -> dict:
+    def supplemental_item_information_gatherer(url: str) -> str:
         # This name is terrible.
         # Some information needs to be grabbed from an items specific page, (specifically we want its dimensions)
-        # This will act on an Item_url and return the necessary information as a dict.
+        # This will act on an Item_url and return the necessary information as a dict
+        # Currently only returns raw string of dims, because its all I want rn.
         print(f"Dimensions being gathered for:{url}")
         information_dict = {}
         source = requests.get(url).text
@@ -184,7 +182,7 @@ class TWebScraper:
                 else:
                     continue
 
-        return information_dict
+        return information_dict.get("dims")
 
     def table_cleaner(self, df: pd.DataFrame) -> pd.DataFrame:
         # TODO: Potentially implement a better solution to handling 'Other' column types
@@ -220,6 +218,12 @@ class TWebScraper:
                 raise NameError('Incorrect column classifier')
 
         cleaned_df['Name'] = cleaned_df['Name'].apply(self.name_cleaner)
+
+        # apply both name_cleaner and rename_dimensional_column functions
+        cleaned_column_names = [self.rename_dimensional_column(self.name_cleaner(name)) for name in cleaned_df.columns]
+
+        cleaned_df.columns = cleaned_column_names
+
         return cleaned_df
 
     @staticmethod
@@ -334,6 +338,15 @@ class TWebScraper:
         name = name.replace("'", "")
         name = name.replace("/", "")
         name = name.replace("*", "")
+        return name
+
+    @staticmethod
+    def rename_dimensional_column(name: str) -> str:  # rename dimensional columns to a common name.
+        name_lower = name.lower()
+        if "inner" in name_lower:
+            return "Inner_dims"
+        if "outer" in name_lower:
+            return "Outer_dims"
         return name
 
 
