@@ -40,10 +40,11 @@ class TDataCatalog:
             if data_module:
                 self.modules.append(data_module)
 
-    def compare_to_catalog(self, candidate: TItemTypes.TItem) -> Union[TItemTypes.TItem, None]:
+    # noinspection SpellCheckingInspection
+    def compare_to_catalog(self, comparate: TItemTypes.TItem) -> Union[TItemTypes.TItem, None]:
         for module in self.modules:
             for item in module.item_list:
-                match = item.compare_to(candidate)
+                match = item.compare_to(comparate)
                 if match:
                     return match
         # if no match is found in catalog, return None
@@ -129,8 +130,8 @@ if __name__ == "__main__":  # debug purposes, will generate the catalog for test
     # container = TItemTypes.TContainerItem("ContainerName", 1, (1, 1), False, (5, 5))
     # result = x.compare_to_catalog(container)
 
-    candidate = cv2.imread(r"C:\pyworkspace\tarkovinventoryproject\Data\testcompare\clipped.PNG")
-    test_item = TItemTypes.TItem("My_Favorite_Helmet", candidate, (2, 2), False)
+    test_image = cv2.imread(r"C:\pyworkspace\tarkovinventoryproject\Data\testcompare\clipped.PNG")
+    test_item = TItemTypes.TItem("My_Favorite_Helmet", test_image, (2, 2), False)
     result = x.compare_to_catalog(test_item)
 
     print()
