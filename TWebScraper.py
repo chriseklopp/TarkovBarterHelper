@@ -14,26 +14,27 @@ import requests
 import os
 import shutil
 import time
+from PIL import Image
 
 
 class TWebScraper:
     def __init__(self, item=True, price=True):
         if item and price:
             # self.supplemental_item_information_gatherer("https://escapefromtarkov.fandom.com/wiki/Folder_with_intelligence")
-            tarkov_wiki_urls = ["https://escapefromtarkov.fandom.com/wiki/Chest_rigs",
+            tarkov_wiki_urls = ["https://escapefromtarkov.fandom.com/wiki/Weapon_mods",
+                                "https://escapefromtarkov.fandom.com/wiki/Chest_rigs",
+                                "https://escapefromtarkov.fandom.com/wiki/Provisions",
                                 "https://escapefromtarkov.fandom.com/wiki/Loot",
                                 "https://escapefromtarkov.fandom.com/wiki/Weapons",
                                 "https://escapefromtarkov.fandom.com/wiki/Keys_%26_Intel",
                                 "https://escapefromtarkov.fandom.com/wiki/Containers",
-                                "https://escapefromtarkov.fandom.com/wiki/Weapon_mods",
                                 "https://escapefromtarkov.fandom.com/wiki/Armor_vests",
                                 "https://escapefromtarkov.fandom.com/wiki/Backpacks",
                                 "https://escapefromtarkov.fandom.com/wiki/Headwear",
                                 "https://escapefromtarkov.fandom.com/wiki/Eyewear",
                                 "https://escapefromtarkov.fandom.com/wiki/Gear_components",
                                 "https://escapefromtarkov.fandom.com/wiki/Armbands",
-                                "https://escapefromtarkov.fandom.com/wiki/Face_cover",
-                                "https://escapefromtarkov.fandom.com/wiki/Provisions"
+                                "https://escapefromtarkov.fandom.com/wiki/Face_cover"
                                 ]
 
             self.directory_builder(tarkov_wiki_urls)
@@ -75,6 +76,8 @@ class TWebScraper:
         table_rows = table_body.findAll('tr')
         # Read table row by row, within each row read column wise.
 
+        col_names = self.create_headers(table_rows)
+
         master_list = []
         for row in table_rows:
             row_contents = []
@@ -84,12 +87,14 @@ class TWebScraper:
             row_tuple = tuple(row_contents)
             master_list.append(row_tuple)
 
-        col_names = master_list.pop(0)  # first entry is the table header.
-        extracted_names = []
-        for item in col_names:
-            extracted_names.append(item['text'][0])
 
-        table_df = pd.DataFrame(master_list, columns=extracted_names)
+
+        # col_names = master_list.pop(0)  # first entry is the table header.
+        # extracted_names = []
+        # for item in col_names:
+        #     extracted_names.append(item['text'][0])
+
+        table_df = pd.DataFrame(master_list, columns=col_names)
         table_df = self.table_cleaner(table_df)
 
         if "Outer_dims" not in table_df.columns:
@@ -99,6 +104,60 @@ class TWebScraper:
                 print("No Item_url column found")
 
         return table_df
+
+    def create_headers(self, row_list: list) -> list:
+        # Reads the list of rows and generates the headers
+        # Cuts off rows identified as headers from row_list and returns a list of proper headers.
+        # TODO : Make code clean and not copy pasted.
+
+        header_list = []
+        first_row = row_list.pop(0)
+        is_multirow_header = False
+
+        # Determine type of header (Single or Multi Row)
+        first_row_columns = first_row.findAll('th')
+        for column in first_row_columns:
+            col_span = column.get("colspan")
+            row_span = column.get("rowspan")
+
+            if col_span:
+                is_multirow_header = True  # Indicates that we need to read second row to get all true column headers
+                break
+
+        # Extract info from first header row.
+
+        for column in first_row_columns:
+            col_span = column.get("colspan")
+            row_span = column.get("rowspan")
+
+            if not is_multirow_header:
+                extracted_name = self.element_parser(column)['text'][0] # Single row header extract directly into list.
+                header_list.append(extracted_name)
+            else:
+                if row_span:  # For multirow header, only multi row span are wanted.
+                    extracted_name = self.element_parser(column)['text'][0]
+                    header_list.append(extracted_name)
+
+                    # If its multirow header, get info from second row.
+        if is_multirow_header:
+
+            second_row = row_list.pop(0)
+            second_row_columns = second_row.findAll('th')
+            for column in second_row_columns:
+                extracted_name = self.element_parser(column)['text'][0]
+                header_list.append(extracted_name)
+
+        # CHECK FOR HEADER SORT ROW.
+        if len(row_list) != 0:
+            third_row = row_list[0]  # dont pop it yet, just in case its not a sort row.
+            third_row_columns = third_row.findAll('th')
+            for column in third_row_columns:
+                element_results = self.element_parser(column)
+                if not element_results:
+                    row_list.pop(0)
+                    break
+
+        return header_list
 
     @staticmethod
     def directory_builder(url_list: list):
@@ -151,12 +210,29 @@ class TWebScraper:
             print("Image_url is empty")
             return
 
-        source = requests.get(url, stream=True)
-        if source.status_code == 200:
-            with open(f"{df_row['Name']}.png", 'wb') as f:
-                source.raw.decode_content = True
-                shutil.copyfileobj(source.raw, f)
-            return os.path.join(os.getcwd(), f"{df_row['Name']}.png")
+        if ".gif" not in url:
+            source = requests.get(url, stream=True)
+            if source.status_code == 200:
+                with open(f"{df_row['Name']}.png", 'wb') as f:
+                    source.raw.decode_content = True
+                    shutil.copyfileobj(source.raw, f)
+                return os.path.join(os.getcwd(), f"{df_row['Name']}.png")
+
+        else:  # occasionally the images are gifs that need to be dealt with properly.
+            source = requests.get(url, stream=True)
+            if source.status_code == 200:
+                with open(f"{df_row['Name']}.gif", 'wb') as f:
+                    source.raw.decode_content = True
+                    shutil.copyfileobj(source.raw, f)
+
+                gif_path = os.path.join(os.getcwd(), f"{df_row['Name']}.gif")
+                im = Image.open(gif_path)
+                # transparency = im.info['transparency']
+
+                im.save(f"{df_row['Name']}.png")
+                return os.path.join(os.getcwd(), f"{df_row['Name']}.png")
+
+
 
     def price_catalog_builder(self):
         pass
@@ -287,6 +363,9 @@ class TWebScraper:
             if not value:
                 value = self.information_extractor(info_dict, alt_tag)
             return value
+
+        if info_dict == None:
+            info_dict = {}
 
         value = info_dict.get(tag)
 
