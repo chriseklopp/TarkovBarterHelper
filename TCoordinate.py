@@ -27,8 +27,8 @@ class TCoordinate:
         return TCoordinate(x, y)
 
     def __sub__(self, other):
-        x = self.x - other.y
-        y = self.x - other.y
+        x = self.x - other.x
+        y = self.y - other.y
         return TCoordinate(x, y)
 
     def values(self):
