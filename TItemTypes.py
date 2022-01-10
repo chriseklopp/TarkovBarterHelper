@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 import copy
-
+from typing import Union
 
 # On start up, TDataCatalog will create an instance of every class.
 # When an item is detected and created, in __init__ it will be compared to the catalog in name, image, dimensions
@@ -33,7 +33,10 @@ class TItem:
         Returns None if no match
         """
         threshold = .80  # this is just an arbitrary value, can be changed as more testing is done.
-        if self._compute_correlation(candidate) > threshold:
+        if self._match_template(candidate) > threshold:
+            # cv2.imshow("TEST", self.image)  # DEBUG
+            # cv2.imshow("CATALOG", candidate.image)
+            # cv2.waitKey(0)
             return self._copy_contents(candidate)
 
         if self._compare_name():
@@ -42,35 +45,18 @@ class TItem:
 
         return None  # if no match is found will just return None
 
-    def _compute_correlation(self, candidate: "TItem") -> float:
+    def _match_template(self, candidate: "TItem") -> float:
         """
-        Computes correlation between images of self and candidate
+        Uses template matching to compare two images.
         """
 
         self_hsv = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
         candidate_hsv = cv2.cvtColor(candidate.image, cv2.COLOR_BGR2HSV)
+        h,w,c = candidate_hsv.shape
+        resized = cv2.resize(self_hsv, (w,h), interpolation=cv2.INTER_AREA)  # want them to be the same size.
 
-        # settings
-        h_bins = 50
-        s_bins = 60
-        hist_size = [h_bins, s_bins]
-        # hue varies from 0 to 179, saturation from 0 to 255
-        h_ranges = [0, 180]
-        s_ranges = [0, 256]
-        ranges = h_ranges + s_ranges  # concat lists
-        # Use the 0-th and 1-st channels
-        channels = [0, 1]
-
-        # convert to histogram, and normalize so hists of both images are the same size.
-        hist_self = cv2.calcHist([self_hsv], channels, None, hist_size, ranges, accumulate=False)
-        cv2.normalize(hist_self, hist_self, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
-
-        hist_candidate = cv2.calcHist([candidate_hsv], channels, None, hist_size, ranges, accumulate=False)
-        cv2.normalize(hist_candidate, hist_candidate, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
-
-        correlation = cv2.compareHist(hist_self, hist_candidate, cv2.HISTCMP_CORREL)  # compute correlation
-
-        return correlation
+        result = cv2.matchTemplate(resized, candidate_hsv, cv2.TM_CCORR_NORMED)
+        return result
 
     def _copy_contents(self, candidate: "TItem") -> "TItem":
         """
@@ -138,7 +124,7 @@ class TContainerItem(TItem):
         self.container_contents = []
 
     def insert_item(self, item: TItem, location: tuple):  # insert an item at a location into the container
-        self.container_contents.append(item)
+        self.container_contents.append((item, location))
         i, j = location
 
         height, width = item.dim
@@ -247,8 +233,32 @@ class TStash(TContainerItem):
 
         return
 
+    def list_contents(self, children=False, unallocated=True) -> Union[list, None]:
+
+        # The TStash version has option for listing unallocated containers
+        if unallocated:
+            unallocated = self.unallocated_containers.copy()
+        else:
+            unallocated = []
+        all_stash_contents = self.container_contents.copy() + unallocated
+
+        if not all_stash_contents:  # return None if empty
+            return None
+
+        if not children:  # container's children will not be listed as well
+            return all_stash_contents
+
+        else:
+            list_of_contents = all_stash_contents
+            for item, location in all_stash_contents: # recursively gets contains from any containers nested.
+                if type(item) == TContainerItem:
+                    contents = item.list_contents(children=True)
+                    list_of_contents += contents
+
+            return list_of_contents
+
     def add_unallocated_container(self, input_container: "TContainerItem"):
-        self.unallocated_containers.append(input_container)
+        self.unallocated_containers.append((input_container, 9999))
 
 
 if __name__ == "__main__":  # debug purposes
