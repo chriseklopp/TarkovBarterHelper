@@ -11,11 +11,17 @@ import TItemTypes
 import cv2
 import numpy as np
 from TCoordinate import TCoordinate
+import TDataCatalog
 
 
 class TImageReader:
     def __init__(self):
         self.current_image = None
+        self.cell_size = 84  # NEED TO FIND A WAY TO RELIABLY CALCULATE THIS W/O HARD CODING IT.
+        self.container_list = []
+
+    def run(self):
+        self.container_list = []  # reset this in case the reader is run again.
         self.parse_image()
 
     def parse_image(self):  # reads a screenshot, detects any open containers and reads it into appropriate objects
@@ -73,6 +79,14 @@ class TImageReader:
         upper_coords = coordinate_tuple[1]
         container_image = self.current_image[lower_coords.y:upper_coords.y, lower_coords.x:upper_coords.x]
         header, body = self.container_split__body_and_header(container_image)
+        if (body is None) or (header is None):
+            return
+
+        # create empty container. Can put crap in here when needed.
+        container = TItemTypes.TContainerItem("PLACEHOLDER", None, (5, 5), False, (20, 20))
+        item_outlines = self.get_item_outlines(body)
+        self.read_item_outlines(body, item_outlines, container)
+        self.container_list.append(container)
 
     @staticmethod
     def container_split__body_and_header(container_image: np.ndarray) -> "tuple[np.ndarray,np.ndarray]":
@@ -87,7 +101,7 @@ class TImageReader:
         kernal = np.ones((2, 2), np.uint8)
         eroded_mask = cv2.erode(invert_mask, kernal, iterations=1)
         dilation_mask = cv2.dilate(eroded_mask, kernal, iterations=1)
-        cv2.imshow("opening", dilation_mask)
+        # cv2.imshow("opening", dilation_mask)
         img_canny = cv2.Canny(invert_mask, 200, 255)  # edge detect
         contours, hierarchy = cv2.findContours(dilation_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
@@ -110,21 +124,89 @@ class TImageReader:
 
                 container_body_image = container_image[upper_window_coords.y:, :]
 
-                cv2.imshow("header", header_image)
-                cv2.imshow("containerbody", container_body_image)
-                if cv2.waitKey(0) & 0xFF == ord('t'):
-                    cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testheader.png", header_image)
-                    cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testcontainerbody.png",
-                                container_body_image)
+                # cv2.imshow("header", header_image)
+                # cv2.imshow("containerbody", container_body_image)
+
+                # DEBUG
+                # if cv2.waitKey(0) & 0xFF == ord('t'):
+                #     cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testheader.png", header_image)
+                #     cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testcontainerbody.png",
+                #                 container_body_image)
 
                 return header_image, container_body_image
 
         if not lower_window_coords:
             print("ERROR: Container header not found.")
-            return None
+            return None, None
 
-    def container_body_get_item_outlines(self):
-        pass
+    def read_item_outlines(self, source_image, item_locations,  container: TItemTypes.TContainerItem):
+        # acts inplace on the container supplied
+        for item in item_locations:
+            lower_coord, upper_coord = item
+            print()
+            item_cropped = source_image[lower_coord.y:upper_coord.y, lower_coord.x:upper_coord.x]  # This is the image.
+
+            # calculate cell location.
+            x, y = lower_coord.values()
+            cells_right = round(x/self.cell_size)
+            cells_down = round(y/self.cell_size)
+
+            # calculate item dimensions.
+            x, y = upper_coord.values()
+            lower_corner_cells_right = round(x / self.cell_size)
+            lower_corner_cells_down = round(y / self.cell_size)
+            dim_x = lower_corner_cells_right - cells_right
+            dim_y = lower_corner_cells_down - cells_down
+
+            # make item
+            this_item = TItemTypes.TItem("Unknown", item_cropped, (dim_x, dim_y), False)
+
+            # Compare it to the Catalog.
+            compared_item = DataCatalog.compare_to_catalog(this_item)
+            if compared_item is not None:
+                this_item = compared_item  # This happens when there was no match.
+
+            container.insert_item(this_item, (cells_right, cells_down))
+        return
+
+    @staticmethod
+    def get_item_outlines(body_image: np.ndarray) -> "list[tuple[TItemTypes.TContainerItem,TItemTypes.TContainerItem]]":
+        # that type statement is hideous LOL
+        # Identify items in body, return list of their locations.
+
+        image_area = body_image.shape[0] * body_image.shape[1]
+
+        img_gray = cv2.cvtColor(body_image, cv2.COLOR_BGR2GRAY)
+        lower_thresh = cv2.threshold(img_gray, 78, 255, cv2.THRESH_BINARY)[1]
+        upper_thresh = cv2.threshold(img_gray, 79, 255, cv2.THRESH_BINARY)[1]
+        combined_thresh = cv2.bitwise_xor(lower_thresh, upper_thresh)
+
+        contours, hierarchy = cv2.findContours(combined_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        coord_pairs = []
+        for cont in contours:
+            area = cv2.contourArea(cont)
+            # < .95 * image_area ensures that if the WHOLE body is identified it wont be counted.
+            if 100 < area < .95 * image_area:
+                peri = cv2.arcLength(cont, True)
+                approx = cv2.approxPolyDP(cont, .2 * peri, True)
+
+                lower_grid_coords = TCoordinate(approx[0][0][0] + 1,
+                                                approx[0][0][1])  # +1 is for a line detection correction
+                upper_grid_coords = TCoordinate(approx[1][0][0], approx[1][0][1])
+
+                coord_pairs.append((lower_grid_coords, upper_grid_coords))
+
+                item_cropped = body_image[lower_grid_coords.y:upper_grid_coords.y,
+                                          lower_grid_coords.x:upper_grid_coords.x]
+
+                # # cv2.drawContours(img_copy, cont, -1, (0, 255, 0), 1)
+                # cv2.imshow("this contour", item_cropped)
+                # cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\THISITEM.png",
+                #             item_cropped)
+                # cv2.imshow("img", body_image)
+
+
+        return coord_pairs
 
     def read_stash_image(self):
         # read a stash image into a TContainerItem
@@ -132,4 +214,8 @@ class TImageReader:
 
 
 if __name__ == "__main__":
-    TImageReader()
+    global DataCatalog  # type: TDataCatalog.TDataCatalog
+    DataCatalog = TDataCatalog.TDataCatalog()
+    reader = TImageReader()
+    reader.run()
+    print()
