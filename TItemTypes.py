@@ -15,6 +15,7 @@ from typing import Union
 # When an item is detected and created, in __init__ it will be compared to the catalog in name, image, dimensions
 # If a match is found the candidate will have its attributes set to the values of the catalog's.
 
+
 @dataclass
 class TItem:
 
@@ -23,6 +24,10 @@ class TItem:
     dim: tuple  # (rows,columns)
     rotated: bool
 
+    def __post_init__(self):
+        if self.image is None:
+            self.image = np.ones((64, 64, 3), np.uint8)
+
     def compare_to(self, candidate: "TItem") -> "TItem":
         """
         Compares a candidate TItem from the catalog to this item.
@@ -30,13 +35,17 @@ class TItem:
         Determine if the candidate has sufficient matching information to the catalog version.
         If so, it will return a copy of the cataloged version (which contains more information)
         with potential modifications. IE: rotated = True
-        Returns None if no match
+        Returns None if no match (YOU MUST CHECK FOR NONE WHEN USING THIS METHOD)
         """
-        threshold = .80  # this is just an arbitrary value, can be changed as more testing is done.
-        if self._match_template(candidate) > threshold:
-            # cv2.imshow("TEST", self.image)  # DEBUG
-            # cv2.imshow("CATALOG", candidate.image)
-            # cv2.waitKey(0)
+        threshold = .85  # this is just an arbitrary value, can be changed as more testing is done.
+        template_match = self._match_template(candidate)
+        if template_match > threshold:
+            print(f"Match: {candidate.name}. Similarity: {template_match}")
+            # DEBUG
+            cv2.imshow("THIS ITEM IMAGE",self.image)
+            cv2.imshow("CATALOG IMAGE", candidate.image)
+            cv2.waitKey(0)
+
             return self._copy_contents(candidate)
 
         if self._compare_name():
@@ -120,6 +129,8 @@ class TContainerItem(TItem):
     container_grid: np.ndarray = field(init=False)
 
     def __post_init__(self):
+        if self.image is None:
+            self.image = np.ones((64, 64, 3), np.uint8)
         self.container_grid = np.zeros(self.container_dims)
         self.container_contents = []
 
