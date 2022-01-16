@@ -33,3 +33,23 @@ class TCoordinate:
 
     def values(self):
         return self.x, self.y
+
+
+# class TCoordinate:
+#
+#     def __init__(self, x, y):
+#         self.x = np.intc(x)
+#         self.y = np.intc(y)
+#
+#     def __add__(self, other):
+#         x = self.x + other.x
+#         y = self.y + other.y
+#         return TCoordinate(x, y)
+#
+#     def __sub__(self, other):
+#         x = self.x - other.x
+#         y = self.y - other.y
+#         return TCoordinate(x, y)
+#
+#     def values(self):
+#         return self.x, self.y
