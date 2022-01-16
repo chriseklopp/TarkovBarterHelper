@@ -16,8 +16,6 @@ import TItemTypes
 from typing import Union
 
 
-
-
 class TDataCatalog:
     def __init__(self):
         self.modules = []
@@ -84,10 +82,6 @@ class DataModule:
         index_names = df_row.index
         image_path = df_row["Image_path"]
 
-        print('--------------')
-        print(os.path.exists(image_path))
-        print(os.path.isfile(image_path))
-
         if type(image_path) is str:
 
             stream = open(image_path, 'rb')
@@ -143,6 +137,7 @@ class DataModule:
             i, j = dim_text.split("x")
             return int(i), int(j)
         return None
+
 
 if __name__ == "__main__":  # debug purposes, will generate the catalog for testing without doing anything else.
 
