@@ -25,7 +25,7 @@ class TImageReader:
         self.parse_image()
 
     def parse_image(self):  # reads a screenshot, detects any open containers and reads it into appropriate objects
-        img_path = r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testimage2.png"
+        img_path = r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testimage4.png"
         my_image = cv2.imread(img_path)
 
         self.current_image = my_image
@@ -110,7 +110,8 @@ class TImageReader:
         upper_window_coords = None
         for cont in contours:
             area = cv2.contourArea(cont)
-            if 100 < area < 15000:  # only the header section is small enough to be selected
+            if 100 < area < 50000:  # only the header section is small enough to be selected
+                # TODO: Change above to be some ratio of window size.
                 # cv2.drawContours(container_image, cont, -1, (0, 255, 0), 1)
                 peri = cv2.arcLength(cont, True)
                 approx = cv2.approxPolyDP(cont, .2 * peri, True)
@@ -118,9 +119,8 @@ class TImageReader:
                 lower_window_coords = TCoordinate(approx[0][0][0], approx[0][0][1])
                 upper_window_coords = TCoordinate(approx[1][0][0], approx[1][0][1])
 
-                ####
                 header_image = container_image[lower_window_coords.y:upper_window_coords.y,
-                               lower_window_coords.x:upper_window_coords.x]
+                                               lower_window_coords.x:upper_window_coords.x]
 
                 container_body_image = container_image[upper_window_coords.y:, :]
 
@@ -170,8 +170,7 @@ class TImageReader:
         return
 
     @staticmethod
-    def get_item_outlines(body_image: np.ndarray) -> "list[tuple[TItemTypes.TContainerItem,TItemTypes.TContainerItem]]":
-        # that type statement is hideous LOL
+    def get_item_outlines(body_image: np.ndarray) -> "list[tuple[TCoordinate,TCoordinate]]":
         # Identify items in body, return list of their locations.
 
         image_area = body_image.shape[0] * body_image.shape[1]
@@ -204,7 +203,6 @@ class TImageReader:
                 # cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\THISITEM.png",
                 #             item_cropped)
                 # cv2.imshow("img", body_image)
-
 
         return coord_pairs
 
