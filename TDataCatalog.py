@@ -45,13 +45,24 @@ class TDataCatalog:
 
     # noinspection SpellCheckingInspection
     def compare_to_catalog(self, comparate: TItemTypes.TItem) -> Union[TItemTypes.TItem, None]:
+        pocket = None
+        pocket_val = 1
         for module in self.modules:
             for item in module.item_list:
-                match = comparate.compare_to(item)
-                if match:
-                    return match
-        # if no match is found in catalog, return None
-        return None
+                compare_result = comparate.compare_to(item)
+                if compare_result:
+                    com_item, val = compare_result
+                    if val < pocket_val:
+                        pocket_val = val
+                        pocket = com_item
+
+        if pocket:
+            print(f"CATALOG: {pocket.name}, VAL: {pocket_val}")
+            # cv2.imshow("THIS ITEM IMAGE", comparate.image)
+            # # cv2.imshow("CATALOG IMAGE", pocket.image)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+        return pocket  # return item with the best mach (lowest value)
 
     def get_item(self, name):
         match = ""

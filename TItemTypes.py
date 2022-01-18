@@ -28,7 +28,7 @@ class TItem:
         if self.image is None:
             self.image = np.ones((64, 64, 3), np.uint8)
 
-    def compare_to(self, candidate: "TItem") -> "TItem":
+    def compare_to(self, candidate: "TItem") -> "tuple[TItem,float]":
         """
         Compares a candidate TItem from the catalog to this item.
         Intended to be used on an item from an image,with candidate being a catalog item.
@@ -41,16 +41,16 @@ class TItem:
         if rotation == 2:
             return None  # these images cannot be the same as they have different dimensions. (this would break weapons)
 
-        threshold = .3  # this is just an arbitrary value, can be changed as more testing is done.
+        threshold = 1  # this is just an arbitrary value, can be changed as more testing is done.
         template_match = self._match_template(candidate)
         if template_match < threshold:
-            print(f"Match: {candidate.name}. Similarity: {template_match}")
+            # print(f"Match: {candidate.name}. Similarity: {template_match}")
             # DEBUG
-            cv2.imshow("THIS ITEM IMAGE", self.image)
-            cv2.imshow("CATALOG IMAGE", candidate.image)
-            cv2.waitKey(0)
+            # cv2.imshow("THIS ITEM IMAGE", self.image)
+            # cv2.imshow("CATALOG IMAGE", candidate.image)
+            # cv2.waitKey(0)
 
-            return self._copy_contents(candidate)
+            return self._copy_contents(candidate), template_match
 
         if self._compare_name():
             # return self._copy_contents(candidate)
@@ -102,6 +102,9 @@ class TItem:
         determines if the dims of self are rotated compared to catalog candidate.
 
         """
+        if len(self.dim) != 2:
+            return False  # whack, somehow we don't have the dimensions
+
         i_self, j_self = self.dim
         if i_self == j_self:  # if it is a square object rotation doesnt matter.
             return False
@@ -116,12 +119,15 @@ class TItem:
         # can occur as some items change their dimensions from reference dims based on attachments (like suppressors)
         return False
 
-    def _compare_dimensions(self,candidate) -> int:
+    def _compare_dimensions(self, candidate) -> int:
         """
         0 = Identical
         1 = Rotated
         2 = Non match
         """
+        if len(self.dim) != 2:
+            return 99  # whack, somehow we don't have the dimensions
+
         i_self, j_self = self.dim
         i_can, j_can = candidate.dim
 
@@ -148,6 +154,8 @@ class TItem:
         name = self.name
         return None
 
+    def __str__(self):
+        return self.name
 
 @dataclass
 class TContainerItem(TItem):
@@ -169,7 +177,7 @@ class TContainerItem(TItem):
         self.container_grid[i:i+height, j:j+width] = 1
 
         # hopefully the bound checking will be done before we get here
-        # and presumably I wont have to check if a spot is already filled, as if it is it is the fault of the
+        # and presumably I wont have to check if a spot is already filled, as if it is the fault of the
         # image reader.
 
         return
@@ -190,6 +198,12 @@ class TContainerItem(TItem):
                     list_of_contents += contents
 
             return list_of_contents
+
+    def print_contents(self, children=False):
+        # like list contents except prints the name and loc of each.
+        contents = self.list_contents(children=children)
+        for item, location in contents:
+            print(f"{item} @ {location}")
 
     def display_contents(self):  # visually display item contents of a container (possibly filled out in the future)
         pass
