@@ -34,7 +34,8 @@ class TWebScraper:
                                 "https://escapefromtarkov.fandom.com/wiki/Eyewear",
                                 "https://escapefromtarkov.fandom.com/wiki/Gear_components",
                                 "https://escapefromtarkov.fandom.com/wiki/Armbands",
-                                "https://escapefromtarkov.fandom.com/wiki/Face_cover"
+                                "https://escapefromtarkov.fandom.com/wiki/Face_cover",
+                                "https://escapefromtarkov.fandom.com/wiki/Medical"
                                 ]
 
             self.directory_builder(tarkov_wiki_urls)
