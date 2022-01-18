@@ -37,12 +37,16 @@ class TItem:
         with potential modifications. IE: rotated = True
         Returns None if no match (YOU MUST CHECK FOR NONE WHEN USING THIS METHOD)
         """
-        threshold = .85  # this is just an arbitrary value, can be changed as more testing is done.
+        rotation = self._compare_dimensions(candidate)
+        if rotation == 2:
+            return None  # these images cannot be the same as they have different dimensions. (this would break weapons)
+
+        threshold = .3  # this is just an arbitrary value, can be changed as more testing is done.
         template_match = self._match_template(candidate)
-        if template_match > threshold:
+        if template_match < threshold:
             print(f"Match: {candidate.name}. Similarity: {template_match}")
             # DEBUG
-            cv2.imshow("THIS ITEM IMAGE",self.image)
+            cv2.imshow("THIS ITEM IMAGE", self.image)
             cv2.imshow("CATALOG IMAGE", candidate.image)
             cv2.waitKey(0)
 
@@ -59,13 +63,19 @@ class TItem:
         Uses template matching to compare two images.
         """
 
-        self_hsv = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
-        candidate_hsv = cv2.cvtColor(candidate.image, cv2.COLOR_BGR2HSV)
-        h,w,c = candidate_hsv.shape
-        resized = cv2.resize(self_hsv, (w,h), interpolation=cv2.INTER_AREA)  # want them to be the same size.
+        candidate_image = candidate.image
+        h, w, c = candidate_image.shape
 
-        result = cv2.matchTemplate(resized, candidate_hsv, cv2.TM_CCORR_NORMED)
-        return result
+        if c == 4:  # sometimes candidate is BGRA
+            candidate_image = cv2.cvtColor(candidate_image, cv2.COLOR_BGRA2BGR)
+
+        h, w, c = self.image.shape
+        candidate_image = cv2.resize(candidate_image, (w, h), interpolation=cv2.INTER_AREA)
+        # want them to be the same size.
+
+        # sqdiff = cv2.matchTemplate(self_resized, candidate_image, cv2.TM_SQDIFF)  # FIX THIS
+        sqdiffnorm = cv2.matchTemplate(self.image, candidate_image, cv2.TM_SQDIFF_NORMED)
+        return sqdiffnorm
 
     def _copy_contents(self, candidate: "TItem") -> "TItem":
         """
@@ -105,6 +115,23 @@ class TItem:
         # final case doesn't need to be stated, but if dimensions are not equal return false
         # can occur as some items change their dimensions from reference dims based on attachments (like suppressors)
         return False
+
+    def _compare_dimensions(self,candidate) -> int:
+        """
+        0 = Identical
+        1 = Rotated
+        2 = Non match
+        """
+        i_self, j_self = self.dim
+        i_can, j_can = candidate.dim
+
+        if self.dim == candidate.dim:  # If dimensions are equal. (doesnt guarantee that it is not rotated)
+            return 0
+
+        if i_self == j_can and j_self == i_can:  # dimensions are rotated
+            return 1
+
+        return 2  # non matchable dimensions
 
     def _compare_name(self):
         """
