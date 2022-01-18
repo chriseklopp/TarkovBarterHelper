@@ -53,6 +53,16 @@ class TDataCatalog:
         # if no match is found in catalog, return None
         return None
 
+    def get_item(self, name):
+        match = ""
+        # Not really intended for use besides debugging
+        for module in self.modules:
+            for item in module.item_list:
+                if item.name == name:
+                    match = item
+                if match:
+                    return match
+
 
 @dataclass
 class DataModule:
@@ -148,6 +158,21 @@ if __name__ == "__main__":  # debug purposes, will generate the catalog for test
 
     test_image = cv2.imread(r"C:\pyworkspace\tarkovinventoryproject\Data\testcompare\clipped.PNG")
     test_item = TItemTypes.TItem("My_Favorite_Helmet", test_image, (2, 2), False)
+
+
+
+    cataloggued = x.get_item("SSh-68_steel_helmet")
+
+    res = test_item.compare_to(cataloggued)
+    # cat_im = cataloggued.image
+    # h, w, c = cat_im.shape
+    # self_resized = cv2.resize(test_item.image, (w, h), interpolation=cv2.INTER_AREA)
+    # if c == 4:  # sometimes candidate is BGRA
+    #     cat_im = cv2.cvtColor(cat_im, cv2.COLOR_BGRA2BGR)
+    #
+    # image_sub = cv2.absdiff(self_resized,cat_im)
+
+    print()
     result = x.compare_to_catalog(test_item)
     print()
 
