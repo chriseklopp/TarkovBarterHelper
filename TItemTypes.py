@@ -45,7 +45,7 @@ class TItem:
         template_match = self._match_template(candidate)
         if template_match < threshold:
             # print(f"Match: {candidate.name}. Similarity: {template_match}")
-            # DEBUG
+            # # DEBUG
             # cv2.imshow("THIS ITEM IMAGE", self.image)
             # cv2.imshow("CATALOG IMAGE", candidate.image)
             # cv2.waitKey(0)
@@ -75,6 +75,9 @@ class TItem:
 
         # sqdiff = cv2.matchTemplate(self_resized, candidate_image, cv2.TM_SQDIFF)  # FIX THIS
         sqdiffnorm = cv2.matchTemplate(self.image, candidate_image, cv2.TM_SQDIFF_NORMED)
+        # cv2.imshow("input", self.image)
+        # cv2.imshow("catalog", candidate_image)
+        # cv2.waitKey(0)
         return sqdiffnorm
 
     def _copy_contents(self, candidate: "TItem") -> "TItem":
@@ -89,11 +92,11 @@ class TItem:
         rotation = self._detect_rotation(candidate)
         candidate_copy.rotated = rotation
 
-        candidate_copy.image = self.image
+        # candidate_copy.image = self.image  # DEBUG: IMAGE, UNCOMMENT THIS
         # results in slight differences, such as durability to be kept
         # or in the case of weapons, for their potentially modded image to not be replaced with the stock one.
 
-        self.dim = ()
+        # self.dim = ()
         return candidate_copy
 
     def _detect_rotation(self, candidate) -> bool:
@@ -126,6 +129,8 @@ class TItem:
         2 = Non match
         """
         if len(self.dim) != 2:
+            cv2.imshow("WTF??", self.image)
+            cv2.waitKey(0)
             return 99  # whack, somehow we don't have the dimensions
 
         i_self, j_self = self.dim
@@ -207,6 +212,24 @@ class TContainerItem(TItem):
 
     def display_contents(self):  # visually display item contents of a container (possibly filled out in the future)
         pass
+
+    def enumerate_contents(self, children=False):
+        # like list contents except prints the name and loc of each.
+        contents = self.list_contents(children=children)
+
+        content_dict = {}
+        for item, location in contents:
+            if item.name in content_dict:
+                content_dict[item.name] += 1
+            else:
+                content_dict[item.name] = 1
+
+        print("-------------------------")
+        print(self.name)
+        print("-------------------------")
+        for key, value in content_dict.items():
+            print(f"{key}: {value}")
+
 
 
 @dataclass
