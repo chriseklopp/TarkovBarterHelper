@@ -51,7 +51,7 @@ class TImageReader:
         mask = cv2.inRange(img_hsv, lower, upper)
         invert_mask = cv2.bitwise_not(mask)
 
-        kernal = np.ones((2,2), np.uint8)
+        kernal = np.ones((2, 2), np.uint8)
         eroded_mask = cv2.erode(invert_mask, kernal, iterations=1)
         dilation_mask = cv2.dilate(eroded_mask, kernal, iterations=1)
 
@@ -106,12 +106,13 @@ class TImageReader:
         contours, hierarchy = cv2.findContours(dilation_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
         # Detect Split between header and body.
+        image_area = container_image.shape[0] * container_image.shape[1]
         lower_window_coords = None
         upper_window_coords = None
+
         for cont in contours:
             area = cv2.contourArea(cont)
-            if 100 < area < 50000:  # only the header section is small enough to be selected
-                # TODO: Change above to be some ratio of window size.
+            if 100 < area < image_area * .2:  # only the header section is small enough to be selected
                 # cv2.drawContours(container_image, cont, -1, (0, 255, 0), 1)
                 peri = cv2.arcLength(cont, True)
                 approx = cv2.approxPolyDP(cont, .2 * peri, True)
@@ -128,8 +129,7 @@ class TImageReader:
                 # cv2.imshow("containerbody", container_body_image)
 
                 # DEBUG
-                # if cv2.waitKey(0) & 0xFF == ord('t'):
-                #     cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testheader.png", header_image)
+
                 #     cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testcontainerbody.png",
                 #                 container_body_image)
 
@@ -139,8 +139,8 @@ class TImageReader:
             print("ERROR: Container header not found.")
             return None, None
 
-    def read_item_outlines(self, source_image, item_locations,  container: TItemTypes.TContainerItem):
-        # acts inplace on the container supplied
+    def read_item_outlines(self, source_image, item_locations, container: TItemTypes.TContainerItem):
+        # acts inplace on the container suppliedgggg
         for item in item_locations:
             lower_coord, upper_coord = item
             print()
@@ -161,16 +161,26 @@ class TImageReader:
             # make item
             this_item = TItemTypes.TItem("Unknown", item_cropped, (dim_x, dim_y), False)
 
-            # Compare it to the Catalog.
-            compared_item = DataCatalog.compare_to_catalog(this_item)
-            if compared_item is not None:
-                this_item = compared_item  # This happens when there was no match.
 
-            container.insert_item(this_item, (cells_right, cells_down))
+            # Testing of Hashing Algo
+            cv2.imshow("THE ORIGINAL", this_item.image)
+            # cv2.waitKey(0)
+            DataCatalog.search_vptree(this_item.image)
+
+
+            #
+            # # Compare it to the Catalog.
+            # compared_item = DataCatalog.compare_to_catalog(this_item)
+            # if compared_item is not None:
+            #     this_item = compared_item  # This happens when there was no match.
+            #
+            # container.insert_item(this_item, (cells_right, cells_down))
+
+
+
         return
 
-    @staticmethod
-    def get_item_outlines(body_image: np.ndarray) -> "list[tuple[TCoordinate,TCoordinate]]":
+    def get_item_outlines(self, body_image: np.ndarray) -> "list[tuple[TCoordinate,TCoordinate]]":
         # Identify items in body, return list of their locations.
 
         image_area = body_image.shape[0] * body_image.shape[1]
@@ -185,7 +195,8 @@ class TImageReader:
         for cont in contours:
             area = cv2.contourArea(cont)
             # < .95 * image_area ensures that if the WHOLE body is identified it wont be counted.
-            if 100 < area < .95 * image_area:
+            min_size = (self.cell_size ** 2) * .85
+            if min_size < area < .90 * image_area:
                 peri = cv2.arcLength(cont, True)
                 approx = cv2.approxPolyDP(cont, .2 * peri, True)
 
@@ -193,16 +204,31 @@ class TImageReader:
                                                 approx[0][0][1])  # +1 is for a line detection correction
                 upper_grid_coords = TCoordinate(approx[1][0][0], approx[1][0][1])
 
+                if upper_grid_coords.x < lower_grid_coords.x:  # I have no idea why this is necessary
+                    upp = upper_grid_coords.x
+                    low = lower_grid_coords.x
+                    upper_grid_coords.x = low
+                    lower_grid_coords.x = upp
+
+                if upper_grid_coords.y < lower_grid_coords.y:  # I have no idea why this is necessary
+                    upp = upper_grid_coords.y
+                    low = lower_grid_coords.y
+                    upper_grid_coords.y = low
+                    lower_grid_coords.y = upp
+
                 coord_pairs.append((lower_grid_coords, upper_grid_coords))
 
                 item_cropped = body_image[lower_grid_coords.y:upper_grid_coords.y,
                                           lower_grid_coords.x:upper_grid_coords.x]
 
+                # print(lower_grid_coords.values())
+                # print(upper_grid_coords.values())
                 # # cv2.drawContours(img_copy, cont, -1, (0, 255, 0), 1)
                 # cv2.imshow("this contour", item_cropped)
-                # cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\THISITEM.png",
-                #             item_cropped)
-                # cv2.imshow("img", body_image)
+                # # cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\THISITEM.png",
+                # #             item_cropped)
+                # # cv2.imshow("img", body_image)
+                # cv2.waitKey(0)
 
         return coord_pairs
 
@@ -216,4 +242,9 @@ if __name__ == "__main__":
     DataCatalog = TDataCatalog.TDataCatalog()
     reader = TImageReader()
     reader.run()
+    print()
+
+    for container in reader.container_list:
+        container.enumerate_contents()
+
     print()
