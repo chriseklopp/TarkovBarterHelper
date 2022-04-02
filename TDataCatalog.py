@@ -14,12 +14,21 @@ import pandas as pd
 from dataclasses import dataclass, field
 import TItemTypes
 from typing import Union
+import vptree
+
+import imagehash
+import PIL
 
 
 class TDataCatalog:
     def __init__(self):
         self.modules = []
         self.build_catalog()
+
+        # Hash Stuff
+        self.hash_dict = {}
+        self.fill_hash_dict()
+        self.VP_tree = self.build_vptree()
 
     def build_catalog(self):  # builds data catalog from modules in catalog directory
         wd = os.getcwd()
@@ -58,15 +67,25 @@ class TDataCatalog:
 
         if pocket:
             print(f"CATALOG: {pocket.name}, VAL: {pocket_val}")
+            ## DEBUG
             # cv2.imshow("THIS ITEM IMAGE", comparate.image)
-            # # cv2.imshow("CATALOG IMAGE", pocket.image)
-            # cv2.waitKey(0)
+            # cv2.imshow("CATALOG IMAGE", pocket.image)
+            # if cv2.waitKey(0) & 0xFF == ord('t'):
+            #     cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\imageofinterest.png",
+            #                 comparate.image)
             # cv2.destroyAllWindows()
+            ## DEBUG
+        else:
+            print("UNKNOWN IMAGE")
+            cv2.imshow("CATALOG IMAGE", comparate.image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
         return pocket  # return item with the best mach (lowest value)
 
     def get_item(self, name):
         match = ""
-        # Not really intended for use besides debugging
+        # Return matching item matching name from catalog
         for module in self.modules:
             for item in module.item_list:
                 if item.name == name:
@@ -74,6 +93,115 @@ class TDataCatalog:
                 if match:
                     return match
 
+    def dump_catalog(self):
+        # DEBUG purposes ONLY
+        item_list = []
+        for module in self.modules:
+            for item in module.item_list:
+                item_list.append(item)
+        return item_list
+
+    def fill_hash_dict(self):
+        print("Converting to Hashes")
+        item_list = self.dump_catalog()
+        for item in item_list:
+            # item = item   #type: TItemTypes.TItem
+            image_hash = self.hash_image(item.image)
+
+            entry = self.hash_dict.get(image_hash, [])  # access key, if DNE set equal to []
+            entry.append(item)
+            self.hash_dict[image_hash] = entry
+        print("Done Converting to Hashes!")
+
+    @staticmethod
+    def compute_hash(image, hash_size=8):
+        # convert the image to grayscale
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # resize the grayscale image, adding a single column (width) so we can compute the horizontal gradient
+        resized = cv2.resize(gray, (hash_size + 1, hash_size))
+
+        # compute the (relative) horizontal gradient between adjacent column pixels
+        diff = resized[:, 1:] > resized[:, :-1]
+
+        # convert the difference image to a hash
+        x = sum([2 ** i for (i, v) in enumerate(diff.flatten()) if v])
+
+        return x
+
+    # @staticmethod
+    # def compute_hash(image, hashSize=8):
+    #     # convert the image to grayscale
+    #     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    #
+    #     # resize the grayscale image, adding a single column (width) so we can compute the horizontal gradient
+    #     resized = cv2.resize(gray, (hashSize + 1, hashSize + 1))
+    #
+    #     # compute the (relative) horizontal gradient between adjacent column pixels
+    #     diff_h = resized[:, 1:] > resized[:, :-1]
+    #
+    #     # Test, compute vertical gradient between adjacent row pixels
+    #     diff_v = resized[1:, :] > resized[:-1, :]
+    #
+    #     h_sum = sum([2 ** i for (i, v) in enumerate(diff_h.flatten()) if v])
+    #     v_sum = sum([2 ** i for (i, v) in enumerate(diff_v.flatten()) if v])
+    #
+    #     joined = int(str(h_sum) + str(v_sum))
+    #
+    #     # convert the difference image to a hash
+    #     return joined
+
+    def hash_image(self, image):
+        # hash_dict = {}  # hash : image
+        # im_hash = self.compute_hash(image)
+        # im_hash = self.convert_hash(im_hash)
+
+        # Testing
+        im_pil = PIL.Image.fromarray(image)
+        im_hash = str(imagehash.phash(im_pil))
+        # awdaw= imagehash.hex_to_hash(im_hash)
+        return im_hash
+
+    @staticmethod
+    def convert_hash(im_hash):
+        # convert the hash to NumPy's 64-bit float and then back to
+        # Python's built in int
+        return int(np.array(im_hash, dtype="float64"))
+
+    @staticmethod
+    def hamming(a, b):
+        # compute and return the Hamming distance between the integers
+
+        # return bin(int(a) ^ int(b)).count("1")
+        return imagehash.hex_to_hash(a)-imagehash.hex_to_hash(b)
+
+
+
+    def build_vptree(self):
+        points = list(self.hash_dict.keys())
+        tree = vptree.VPTree(points, self.hamming)
+        return tree
+
+    def search_vptree(self, image):
+
+        query_hash = self.hash_image(image)
+        results = self.VP_tree.get_n_nearest_neighbors(query_hash,5)
+        results = sorted(results)
+
+        if not len(results):
+            print("0 results in range")
+
+        for (d, h) in results:
+            # grab all image paths in our dataset with the same hash
+            result_items = self.hash_dict.get(h, [])
+            print("[INFO] {} total image(s) with d: {}, h: {}".format(len(result_items), d, h))
+
+            # loop over the result paths
+            for item in result_items:
+                # load the result image and display it to our screen
+                cv2.imshow("Result", item.image)
+                cv2.waitKey(0)
 
 @dataclass
 class DataModule:
@@ -153,7 +281,7 @@ class DataModule:
                 return
 
     @staticmethod
-    def _read_dims(dim_text: str):  # this really should be done in the TWebScraper, but is here because im lazy
+    def _read_dims(dim_text: str):
         if dim_text:
             i, j = dim_text.split("x")
             return int(i), int(j)
@@ -167,23 +295,13 @@ if __name__ == "__main__":  # debug purposes, will generate the catalog for test
     # container = TItemTypes.TContainerItem("ContainerName", 1, (1, 1), False, (5, 5))
     # result = x.compare_to_catalog(container)
 
-    test_image = cv2.imread(r"C:\pyworkspace\tarkovinventoryproject\Data\testcompare\clipped.PNG")
-    test_item = TItemTypes.TItem("My_Favorite_Helmet", test_image, (2, 2), False)
+    imageofinterest = cv2.imread(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testitem6.png")
+    test_item = TItemTypes.TItem("My_Favorite_Helmet", imageofinterest, (4, 4), False)
+
+    x.search_vptree(test_item.image)
+    x.compare_to_catalog(test_item)
+    # awdaw = x.get_item("SAS_drive")
 
 
-
-    cataloggued = x.get_item("SSh-68_steel_helmet")
-
-    res = test_item.compare_to(cataloggued)
-    # cat_im = cataloggued.image
-    # h, w, c = cat_im.shape
-    # self_resized = cv2.resize(test_item.image, (w, h), interpolation=cv2.INTER_AREA)
-    # if c == 4:  # sometimes candidate is BGRA
-    #     cat_im = cv2.cvtColor(cat_im, cv2.COLOR_BGRA2BGR)
-    #
-    # image_sub = cv2.absdiff(self_resized,cat_im)
-
-    print()
-    result = x.compare_to_catalog(test_item)
     print()
 
