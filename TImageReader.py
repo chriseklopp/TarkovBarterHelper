@@ -12,21 +12,29 @@ import cv2
 import numpy as np
 from TCoordinate import TCoordinate
 import TDataCatalog
+import TTextDetection
+import os
+import datetime
+import pytesseract
 
+
+# TODO: Rewrite / Clean Up this ugly mess
 
 class TImageReader:
     def __init__(self):
         self.current_image = None
         self.cell_size = 84  # NEED TO FIND A WAY TO RELIABLY CALCULATE THIS W/O HARD CODING IT.
         self.container_list = []
+        self.header_images = []
 
-    def run(self):
+    def run(self, image_path):
         self.container_list = []  # reset this in case the reader is run again.
-        self.parse_image()
+        self.parse_image(image_path)
+        self.save_headers()
 
-    def parse_image(self):  # reads a screenshot, detects any open containers and reads it into appropriate objects
-        img_path = r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testimage4.png"
-        my_image = cv2.imread(img_path)
+    def parse_image(self, image_path):  # reads a screenshot, detects any open containers and reads it into appropriate objects
+
+        my_image = cv2.imread(image_path)
 
         self.current_image = my_image
 
@@ -83,6 +91,8 @@ class TImageReader:
             return
 
         # create empty container. Can put crap in here when needed.
+        name = self.get_container_name(header)
+        self.header_images.append(header)  # allows headers to be saved and extracted from the class for ML training
         container = TItemTypes.TContainerItem("PLACEHOLDER", None, (5, 5), False, (20, 20))
         item_outlines = self.get_item_outlines(body)
         self.read_item_outlines(body, item_outlines, container)
@@ -90,6 +100,7 @@ class TImageReader:
 
     @staticmethod
     def container_split__body_and_header(container_image: np.ndarray) -> "tuple[np.ndarray,np.ndarray]":
+        img_gray = cv2.cvtColor(container_image,cv2.COLOR_BGRA2GRAY)
 
         img_hsv = cv2.cvtColor(container_image, cv2.COLOR_BGR2HSV)
         lower = np.array([0, 0, 1])
@@ -132,7 +143,7 @@ class TImageReader:
 
                 #     cv2.imwrite(r"C:\pyworkspace\tarkovinventoryproject\Data\screenshots\testcontainerbody.png",
                 #                 container_body_image)
-
+                head_gray_debug = cv2.cvtColor(header_image,cv2.COLOR_BGRA2GRAY)
                 return header_image, container_body_image
 
         if not lower_window_coords:
@@ -162,19 +173,23 @@ class TImageReader:
             this_item = TItemTypes.TItem("Unknown", item_cropped, (dim_x, dim_y), False)
 
 
-            # Testing of Hashing Algo
-            cv2.imshow("THE ORIGINAL", this_item.image)
+            # # Testing of Hashing Algo
+            # cv2.imshow("THE ORIGINAL", this_item.image)
             # cv2.waitKey(0)
-            DataCatalog.search_vptree(this_item.image)
+            # DataCatalog.search_vptree(this_item.image)
+            match_item = DataCatalog.hash_template_match(this_item)
 
-
+            if match_item is None:
+                pass # this would happen if NONE of the offerred items have the correct dims in com[are_to
+            else:
+                this_item = match_item
             #
-            # # Compare it to the Catalog.
+            # Compare it to the Catalog.
             # compared_item = DataCatalog.compare_to_catalog(this_item)
             # if compared_item is not None:
             #     this_item = compared_item  # This happens when there was no match.
-            #
-            # container.insert_item(this_item, (cells_right, cells_down))
+
+            container.insert_item(this_item, (cells_right, cells_down))
 
 
 
@@ -199,6 +214,10 @@ class TImageReader:
             if min_size < area < .90 * image_area:
                 peri = cv2.arcLength(cont, True)
                 approx = cv2.approxPolyDP(cont, .2 * peri, True)
+
+                d,h,w = approx.shape
+                if d != 2:
+                    continue
 
                 lower_grid_coords = TCoordinate(approx[0][0][0] + 1,
                                                 approx[0][0][1])  # +1 is for a line detection correction
@@ -232,6 +251,29 @@ class TImageReader:
 
         return coord_pairs
 
+    def get_container_name(self, header):
+        name = "PLACEHOLDER"
+
+        h, w, c = header.shape
+        header = header[:, :round(w/2)]
+        header_HSV = cv2.cvtColor(header, cv2.COLOR_BGR2HSV)
+        lower = np.array([0, 7, 0])
+        upper = np.array([179, 255, 255])
+        mask = cv2.inRange(header_HSV, lower, upper)
+        invert_mask = cv2.bitwise_not(mask)
+        characters = TTextDetection.find_isolated_binary_object(invert_mask)
+
+        return name
+
+    def save_headers(self):
+        # saves header to file for use in ml training
+        wd = os.getcwd()
+        raw_header_dir = os.path.join(wd, "Data", "training", "headers", "raw")
+        for header in self.header_images:
+            suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+            cv2.imwrite(f"{raw_header_dir}/header_{suffix}.png", header)
+
+
     def read_stash_image(self):
         # read a stash image into a TContainerItem
         pass
@@ -241,10 +283,17 @@ if __name__ == "__main__":
     global DataCatalog  # type: TDataCatalog.TDataCatalog
     DataCatalog = TDataCatalog.TDataCatalog()
     reader = TImageReader()
-    reader.run()
+
+    wd = os.getcwd()
+    raw_header_dir = os.path.join(wd, "Data", "screenshots", "raw")
+    images = os.listdir(raw_header_dir)
+    for image in images:
+        image_path = os.path.join(raw_header_dir, image)
+        reader.run(image_path)
     print()
 
-    for container in reader.container_list:
-        container.enumerate_contents()
+
+    # for container in reader.container_list:
+    #     container.enumerate_contents()
 
     print()

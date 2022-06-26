@@ -42,6 +42,7 @@ class TItem:
             return None  # these images cannot be the same as they have different dimensions. (this would break weapons)
 
         threshold = 1  # this is just an arbitrary value, can be changed as more testing is done.
+        # histmatch = self._match_histogram(candidate)
         template_match = self._match_template(candidate)
         if template_match < threshold:
             # print(f"Match: {candidate.name}. Similarity: {template_match}")
@@ -72,13 +73,39 @@ class TItem:
         h, w, c = self.image.shape
         candidate_image = cv2.resize(candidate_image, (w, h), interpolation=cv2.INTER_AREA)
         # want them to be the same size.
-
-        # sqdiff = cv2.matchTemplate(self_resized, candidate_image, cv2.TM_SQDIFF)  # FIX THIS
         sqdiffnorm = cv2.matchTemplate(self.image, candidate_image, cv2.TM_SQDIFF_NORMED)
-        # cv2.imshow("input", self.image)
-        # cv2.imshow("catalog", candidate_image)
-        # cv2.waitKey(0)
+
         return sqdiffnorm
+
+    def _match_histogram(self, candidate: "TItem") -> float:
+
+        ########## hist args
+        h_bins = 50
+        s_bins = 60
+        histSize = [h_bins, s_bins]
+        # hue varies from 0 to 179, saturation from 0 to 255
+        h_ranges = [0, 180]
+        s_ranges = [0, 256]
+        ranges = h_ranges + s_ranges  # concat lists
+        # Use the 0-th and 1-st channels
+        channels = [0, 1]
+        ################
+
+        # convert to hsv
+
+        item_hsv = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
+        candidate_hsv = cv2.cvtColor(candidate.image, cv2.COLOR_BGR2HSV)
+
+        #
+
+        item_hist = cv2.calcHist([item_hsv], channels, None, histSize, ranges, accumulate=False)
+        cv2.normalize(item_hist, item_hist, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
+
+        candidate_hist = cv2.calcHist([candidate_hsv], channels, None, histSize, ranges, accumulate=False)
+        cv2.normalize(candidate_hist, candidate_hist, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
+
+        result = cv2.compareHist(item_hist,candidate_hist, cv2.HISTCMP_CORREL)
+        return result
 
     def _copy_contents(self, candidate: "TItem") -> "TItem":
         """
