@@ -1,6 +1,11 @@
 # TarkovBarterHelper
 Escape from Tarkov Inventory Analyzer and Barter Helper
 
+** This project has been rewritten in C++ at https://github.com/chriseklopp/TarkovInventoryAssistant.
+** All further work on this project will happen there instead. Leaving this old repo up for archival purposes.
+
+
+
 Motivation:
 ------------------------------------------------------------------------------------------------------------------------
 Escape from Tarkov doesn't have a method of itemizing your hideout Stash (item storage). The only useful information the
